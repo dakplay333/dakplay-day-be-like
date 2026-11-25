@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Открытый мир — FPS</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: #fff;
+      user-select: none;
+    }
+    canvas { display: block; }
+
+    #hud {
+      position: fixed;
+      top: 12px;
+      left: 14px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, .45);
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.55;
+      pointer-events: none;
+      z-index: 5;
+    }
+    #coins { color: #ffd86b; font-weight: 700; }
+
+    #minimap {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, .45);
+      border: 2px solid rgba(255, 255, 255, .45);
+      border-radius: 8px;
+      z-index: 5;
+    }
+
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 26px;
+      line-height: 1;
+      color: rgba(255, 255, 255, .9);
+      text-shadow: 0 0 4px #000;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 42px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, .6);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 15px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity .18s;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, .62);
+      backdrop-filter: blur(4px);
+      z-index: 10;
+    }
+    .overlay.hidden { display: none; }
+
+    .panel {
+      background: linear-gradient(145deg, #1d2b1a, #0d150b);
+      border: 1px solid #5d8a4a;
+      padding: 28px 34px;
+      border-radius: 14px;
+      max-width: 540px;
+      box-shadow: 0 12px 45px rgba(0, 0, 0, .65);
+    }
+    .panel h1 { margin: 0 0 6px; font-size: 30px; }
+    .panel p { margin: 6px 0 16px; line-height: 1.6; color: #d8e6d0; }
+
+    .keys {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 14px;
+      font-size: 14px;
+      margin: 14px 0 22px;
+    }
+    .keys b { color: #bfe6a6; }
+
+    button {
+      cursor: pointer;
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 15px;
+      font-weight: 700;
+      background: #7fbf5a;
+      color: #10200c;
+    }
+    button:hover { background: #96d972; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    #shop .panel { max-width: 640px; }
+    .shop-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin: 16px 0 20px;
+    }
+    .item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: rgba(255, 255, 255, .07);
+      padding: 10px 12px;
+      border-radius: 10px;
+    }
+    .item small { color: #ffd86b; }
+    .item button { padding: 6px 12px; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+  <div id="hud">
+    Монеты: <span id="coins">100</span><br />
+    Инвентарь: <span id="inv">пусто</span>
+  </div>
+  <canvas id="minimap" width="170" height="170"></canvas>
+  <div id="crosshair">+</div>
+  <div id="hint"></div>
+
+  <div id="menu" class="overlay">
+    <div class="panel">
+      <h1 id="menuTitle">Открытый мир</h1>
+      <p>Большой лес, дома, дорога и один магазин. Исследуй мир от первого лица.</p>
+      <div class="keys">
+        <b>W A S D</b><span>движение</span>
+        <b>Мышь</b><span>осмотр</span>
+        <b>Shift</b><span>бег</span>
+        <b>Пробел</b><span>прыжок</span>
+        <b>E</b><span>войти в магазин</span>
+        <b>I</b><span>инвентарь</span>
+        <b>Esc</b><span>пауза</span>
+      </div>
+      <button id="playBtn">Начать игру</button>
+    </div>
+  </div>
+
+  <div id="shop" class="overlay hidden">
+    <div class="panel">
+      <h1>Магазин</h1>
+      <p>Твои монеты: <span id="shopCoins" style="color:#ffd86b;font-weight:700">100</span></p>
+      <div id="items" class="shop-grid"></div>
+      <button id="closeShop">Выйти из магазина (E)</button>
+    </div>
+  </div>
+
+  <div id="inventory" class="overlay hidden">
+    <div class="panel">
+      <h1>Инвентарь</h1>
+      <p>Всё, что ты купил в магазине.</p>
+      <div id="invItems" class="shop-grid"></div>
+      <button id="closeInventory">Закрыть (I)</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+    // ---------- Константы ----------
+    const WORLD = 500;
+    const HALF = WORLD / 2;
+    const EYE = 1.7;
+    const RADIUS = 0.5;
+
+    const menu = document.getElementById('menu');
+    const menuTitle = document.getElementById('menuTitle');
+    const playBtn = document.getElementById('playBtn');
+    const shopPanel = document.getElementById('shop');
+    const closeShopBtn = document.getElementById('closeShop');
+    const inventoryPanel = document.getElementById('inventory');
+    const invItemsEl = document.getElementById('invItems');
+    const closeInventoryBtn = document.getElementById('closeInventory');
+    const itemsEl = document.getElementById('items');
+    const coinsEl = document.getElementById('coins');
+    const shopCoinsEl = document.getElementById('shopCoins');
+    const invEl = document.getElementById('inv');
+    const hintEl = document.getElementById('hint');
+    const crosshair = document.getElementById('crosshair');
+    const mapCanvas = document.getElementById('minimap');
+    const mctx = mapCanvas.getContext('2d');
+
+    // ---------- Сцена ----------
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9fd3ff);
+    scene.fog = new THREE.FogExp2(0x9fd3ff, 0.006);
+
+    const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 1200);
+    camera.position.set(0, EYE + 0.5, 12);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x4a6b34, 1.25));
+
+    const sunLight = new THREE.DirectionalLight(0xfff2cc, 2.1);
+    sunLight.position.set(-60, 100, -40);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.set(2048, 2048);
+    sunLight.shadow.camera.left = -90;
+    sunLight.shadow.camera.right = 90;
+    sunLight.shadow.camera.top = 90;
+    sunLight.shadow.camera.bottom = -90;
+    sunLight.shadow.camera.near = 1;
+    sunLight.shadow.camera.far = 260;
+    scene.add(sunLight);
+    scene.add(sunLight.target);
+
+    // Солнце на небе
+    const sun = new THREE.Mesh(
+      new THREE.SphereGeometry(9, 20, 20),
+      new THREE.MeshBasicMaterial({ color: 0xfff4b0, fog: false })
+    );
+    sun.position.set(-180, 170, -260);
+    scene.add(sun);
+
+    // ---------- Текстуры ----------
+    function speckleTexture(base, colors, count, repeatX, repeatY) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, 512, 512);
+      for (let i = 0; i < count; i++) {
+        ctx.fillStyle = colors[(Math.random() * colors.length) | 0];
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const w = 1 + Math.random() * 3;
+        const h = 1 + Math.random() * 5;
+        ctx.fillRect(x, y, w, h);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeatX, repeatY);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return tex;
+    }
+
+    const grassTex = speckleTexture(
+      '#4f8a3d',
+      ['#5c9a46', '#448036', '#6aa94f', '#3d7330', '#79b95b'],
+      9000, 70, 70
+    );
+    const roadTex = speckleTexture(
+      '#9a8a70',
+      ['#8a7a63', '#aa9a80', '#756955', '#b5a68c'],
+      7000, 1, 70
+    );
+
+    // ---------- Ландшафт ----------
+    function heightAt(x, z) {
+      return 0.55 * Math.sin(x * 0.018) * Math.cos(z * 0.016)
+           + 0.25 * Math.sin((x + z) * 0.06);
+    }
+
+    const terrainGeo = new THREE.PlaneGeometry(WORLD, WORLD, 100, 100);
+    terrainGeo.rotateX(-Math.PI / 2);
+    const pos = terrainGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setY(i, heightAt(pos.getX(i), pos.getZ(i)));
+    }
+    terrainGeo.computeVertexNormals();
+    const terrain = new THREE.Mesh(
+      terrainGeo,
+      new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 })
+    );
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+
+    // Дорога вдоль оси Z
+    const roadGeo = new THREE.PlaneGeometry(8, WORLD, 1, 100);
+    roadGeo.rotateX(-Math.PI / 2);
+    const rpos = roadGeo.attributes.position;
+    for (let i = 0; i < rpos.count; i++) {
+      rpos.setY(i, heightAt(rpos.getX(i), rpos.getZ(i)) + 0.05);
+    }
+    roadGeo.computeVertexNormals();
+    const road = new THREE.Mesh(
+      roadGeo,
+      new THREE.MeshStandardMaterial({ map: roadTex, roughness: 1 })
+    );
+    road.receiveShadow = true;
+    scene.add(road);
+
+    // ---------- Препятствия ----------
+    const obstacles = [];
+    const houses = [];
+    let shopPos = new THREE.Vector3();
+
+    function addHouse(x, z, color) {
+      const w = 8, d = 7, h = 4;
+      const g = new THREE.Group();
+      g.position.set(x, heightAt(x, z), z);
+
+      const walls = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color, roughness: .9 })
+      );
+      walls.position.y = h / 2;
+      walls.castShadow = walls.receiveShadow = true;
+      g.add(walls);
+
+      const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(Math.max(w, d) * 0.78, 2.6, 4),
+        new THREE.MeshStandardMaterial({ color: 0x6b3b2a, roughness: .95 })
+      );
+      roof.position.y = h + 1.3;
+      roof.rotation.y = Math.PI / 4;
+      roof.castShadow = true;
+      g.add(roof);
+
+      const door = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 2.4, 0.12),
+        new THREE.MeshStandardMaterial({ color: 0x3b2a1d })
+      );
+      door.position.set(-w * 0.22, 1.2, d / 2 + 0.07);
+      g.add(door);
+
+      const winMat = new THREE.MeshStandardMaterial({
+        color: 0x9fd8ff, emissive: 0x224466, emissiveIntensity: .35, roughness: .2
+      });
+      const frontWin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.3, 0.1), winMat);
+      frontWin.position.set(w * 0.22, 2.3, d / 2 + 0.08);
+      g.add(frontWin);
+      const sideWin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.3, 1.6), winMat);
+      sideWin.position.set(w / 2 + 0.08, 2.3, 0);
+      g.add(sideWin);
+
+      scene.add(g);
+      obstacles.push({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+      houses.push({ x, z, w, d });
+    }
+
+    function makeSignTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 128;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#14532d';
+      ctx.fillRect(0, 0, 512, 128);
+      ctx.strokeStyle = '#ffd86b';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(6, 6, 500, 116);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 66px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('МАГАЗИН', 256, 68);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function addShop() {
+      const x = 14, z = -40, w = 12, d = 9, h = 5;
+      const g = new THREE.Group();
+      g.position.set(x, heightAt(x, z), z);
+
+      const walls = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({ color: 0xd9c7a1, roughness: .85 })
+      );
+      walls.position.y = h / 2;
+      walls.castShadow = walls.receiveShadow = true;
+      g.add(walls);
+
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(w + 1, 0.6, d + 1),
+        new THREE.MeshStandardMaterial({ color: 0xa33b32, roughness: .85 })
+      );
+      roof.position.y = h + 0.3;
+      roof.castShadow = true;
+      g.add(roof);
+
+      // Полосатый козырёк
+      for (let i = 0; i < 6; i++) {
+        const stripe = new THREE.Mesh(
+          new THREE.BoxGeometry(w / 6, 0.18, 1.8),
+          new THREE.MeshStandardMaterial({ color: i % 2 ? 0xffffff : 0xc0392b })
+        );
+        stripe.position.set(-w / 2 + (i + 0.5) * (w / 6), h - 0.45, d / 2 + 0.8);
+        g.add(stripe);
+      }
+
+      const sign = new THREE.Mesh(
+        new THREE.PlaneGeometry(8, 1.6),
+        new THREE.MeshBasicMaterial({ map: makeSignTexture() })
+      );
+      sign.position.set(0, h + 1.6, d / 2 + 0.12);
+      g.add(sign);
+
+      const door = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 2.8, 0.14),
+        new THREE.MeshStandardMaterial({ color: 0x2f6b3a, roughness: .6 })
+      );
+      door.position.set(0, 1.4, d / 2 + 0.09);
+      g.add(door);
+
+      const winMat = new THREE.MeshStandardMaterial({
+        color: 0xffe9a8, emissive: 0xffaa33, emissiveIntensity: .45, roughness: .2
+      });
+      for (const wx of [-3.7, 3.7]) {
+        const win = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2, 0.12), winMat);
+        win.position.set(wx, 2.4, d / 2 + 0.1);
+        g.add(win);
+      }
+
+      scene.add(g);
+      obstacles.push({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+      shopPos.set(x, heightAt(x, z), z + d / 2 + 1.5);
+    }
+
+    const treeSpots = [];
+    function addTree(x, z) {
+      const s = 0.8 + Math.random() * 0.7;
+      const g = new THREE.Group();
+      g.position.set(x, heightAt(x, z), z);
+
+      const trunkH = 3 * s;
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22 * s, 0.34 * s, trunkH, 7),
+        new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 1 })
+      );
+      trunk.position.y = trunkH / 2;
+      trunk.castShadow = true;
+      g.add(trunk);
+
+      if (Math.random() < 0.65) {
+        const pine1 = new THREE.Mesh(
+          new THREE.ConeGeometry(1.8 * s, 4 * s, 8),
+          new THREE.MeshStandardMaterial({ color: 0x246b32, roughness: 1 })
+        );
+        pine1.position.y = trunkH + 1.5 * s;
+        pine1.castShadow = true;
+        g.add(pine1);
+        const pine2 = new THREE.Mesh(
+          new THREE.ConeGeometry(1.3 * s, 3 * s, 8),
+          new THREE.MeshStandardMaterial({ color: 0x2f7d3c, roughness: 1 })
+        );
+        pine2.position.y = trunkH + 3 * s;
+        pine2.castShadow = true;
+        g.add(pine2);
+      } else {
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x3f8a3a, roughness: 1 });
+        const crown = new THREE.Mesh(new THREE.SphereGeometry(1.9 * s, 10, 8), leafMat);
+        crown.position.y = trunkH + 1.2 * s;
+        crown.castShadow = true;
+        g.add(crown);
+        const crown2 = new THREE.Mesh(new THREE.SphereGeometry(1.4 * s, 10, 8), leafMat);
+        crown2.position.set(0.8 * s, trunkH + 2 * s, 0.3 * s);
+        crown2.castShadow = true;
+        g.add(crown2);
+      }
+
+      scene.add(g);
+      obstacles.push({ type: 'circle', x, z, r: 0.5 * s });
+      treeSpots.push({ x, z });
+    }
+
+    // Дома
+    const houseSpots = [
+      [-28, 25], [-34, -8], [-26, -48], [32, 18], [38, -20], [28, -62],
+      [-70, 60], [-66, 10], [-78, -38], [70, 55], [76, -10], [64, -70],
+      [-115, -15], [112, 34], [-40, 105], [46, 108]
+    ];
+    const houseColors = [0xb9654a, 0xc98b5e, 0xa75c4e, 0xd0a06a, 0x9c6b52];
+    houseSpots.forEach(([x, z], i) => addHouse(x, z, houseColors[i % houseColors.length]));
+
+    // Магазин
+    addShop();
+
+    // Деревья
+    let attempts = 0;
+    while (treeSpots.length < 230 && attempts < 5000) {
+      attempts++;
+      const x = (Math.random() * 2 - 1) * (HALF - 12);
+      const z = (Math.random() * 2 - 1) * (HALF - 12);
+      if (Math.abs(x) < 7) continue;                 // дорога
+      if (x * x + (z - 12) ** 2 < 64) continue;      // стартовая площадка
+      const ds = Math.hypot(x - shopPos.x, z - (shopPos.z - 1.5));
+      if (ds < 20) continue;                         // магазин
+      if (houses.some(h => Math.abs(x - h.x) < h.w / 2 + 6 && Math.abs(z - h.z) < h.d / 2 + 6)) continue;
+      if (treeSpots.some(t => Math.hypot(x - t.x, z - t.z) < 3.6)) continue;
+      addTree(x, z);
+    }
+
+    // Облака
+    const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .85, fog: false });
+    for (let i = 0; i < 28; i++) {
+      const cloud = new THREE.Group();
+      const puffs = 3 + ((Math.random() * 3) | 0);
+      for (let j = 0; j < puffs; j++) {
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(3 + Math.random() * 3, 10, 8), cloudMat);
+        puff.position.set((j - puffs / 2) * 3.2, Math.random() * 1.5, Math.random() * 2);
+        cloud.add(puff);
+      }
+      cloud.position.set((Math.random() * 2 - 1) * 420, 55 + Math.random() * 35, (Math.random() * 2 - 1) * 420);
+      cloud.scale.setScalar(0.8 + Math.random() * 0.9);
+      scene.add(cloud);
+    }
+
+    // ---------- Управление ----------
+    const controls = new PointerLockControls(camera, document.body);
+    let started = false;
+    let shopOpen = false;
+    let inventoryOpen = false;
+    let gameActive = false;
+
+    function showMenu(title) {
+      menuTitle.textContent = title;
+      playBtn.textContent = started ? 'Продолжить игру' : 'Начать игру';
+      menu.classList.remove('hidden');
+    }
+
+    controls.addEventListener('lock', () => {
+      gameActive = true;
+      menu.classList.add('hidden');
+      shopPanel.classList.add('hidden');
+      shopOpen = false;
+      crosshair.style.opacity = 1;
+    });
+    controls.addEventListener('unlock', () => {
+      crosshair.style.opacity = 0;
+      clearMove();
+      if (!shopOpen && !inventoryOpen) {
+        gameActive = false;
+        showMenu(started ? 'Пауза' : 'Открытый мир');
+      }
+    });
+
+    // Если браузер запретил Pointer Lock, игра всё равно запускается:
+    // осмотр мышью с зажатой ЛКМ или стрелками.
+    document.addEventListener('pointerlockerror', () => {
+      if (gameActive) toast('Осмотр: зажми ЛКМ или используй стрелки ← ↑ ↓ →');
+    });
+
+    playBtn.addEventListener('click', () => {
+      started = true;
+      gameActive = true;
+      menu.classList.add('hidden');
+      crosshair.style.opacity = 1;
+      controls.lock();
+    });
+
+    const move = {
+      forward: false, back: false, left: false, right: false,
+      jump: false, sprint: false,
+      lookLeft: false, lookRight: false, lookUp: false, lookDown: false
+    };
+    function clearMove() {
+      for (const key of Object.keys(move)) move[key] = false;
+    }
+    function keyCode(e) {
+      if (e.code) return e.code;
+      if (e.key === ' ') return 'Space';
+      if (e.key && e.key.length === 1) return 'Key' + e.key.toUpperCase();
+      return e.key || '';
+    }
+    addEventListener('keydown', (e) => {
+      switch (keyCode(e)) {
+        case 'KeyW': move.forward = true; break;
+        case 'KeyS': move.back = true; break;
+        case 'KeyA': move.left = true; break;
+        case 'KeyD': move.right = true; break;
+        case 'ShiftLeft': case 'ShiftRight': case 'Shift': move.sprint = true; break;
+        case 'Space': e.preventDefault(); if (gameActive && !e.repeat) move.jump = true; break;
+        case 'ArrowLeft': e.preventDefault(); move.lookLeft = true; break;
+        case 'ArrowRight': e.preventDefault(); move.lookRight = true; break;
+        case 'ArrowUp': e.preventDefault(); move.lookUp = true; break;
+        case 'ArrowDown': e.preventDefault(); move.lookDown = true; break;
+        case 'KeyI': if (gameActive) toggleInventory(); break;
+        case 'KeyE':
+          if (shopOpen) closeShop();
+          else if (inventoryOpen) closeInventory();
+          else if (gameActive && nearShop()) openShop();
+          break;
+      }
+    });
+    addEventListener('keyup', (e) => {
+      switch (keyCode(e)) {
+        case 'KeyW': move.forward = false; break;
+        case 'KeyS': move.back = false; break;
+        case 'KeyA': move.left = false; break;
+        case 'KeyD': move.right = false; break;
+        case 'ShiftLeft': case 'ShiftRight': case 'Shift': move.sprint = false; break;
+        case 'Space': move.jump = false; break;
+        case 'ArrowLeft': move.lookLeft = false; break;
+        case 'ArrowRight': move.lookRight = false; break;
+        case 'ArrowUp': move.lookUp = false; break;
+        case 'ArrowDown': move.lookDown = false; break;
+      }
+    });
+
+    // Резервный осмотр, если Pointer Lock недоступен
+    const lookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    function applyLook(dx, dy) {
+      lookEuler.setFromQuaternion(camera.quaternion, 'YXZ');
+      lookEuler.y -= dx * 0.002;
+      lookEuler.x -= dy * 0.002;
+      lookEuler.x = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, lookEuler.x));
+      camera.quaternion.setFromEuler(lookEuler);
+    }
+    let dragging = false;
+    renderer.domElement.addEventListener('mousedown', (e) => {
+      if (gameActive && !shopOpen && !inventoryOpen && e.button === 0 && !controls.isLocked) dragging = true;
+    });
+    addEventListener('mouseup', () => { dragging = false; });
+    addEventListener('mousemove', (e) => {
+      if (dragging && gameActive && !shopOpen && !inventoryOpen && !controls.isLocked) {
+        applyLook(e.movementX || 0, e.movementY || 0);
+      }
+    });
+
+    // ---------- Магазин ----------
+    let coins = 100;
+    const inventory = {};
+    const goods = [
+      { id: 'bread', icon: '🍞', name: 'Хлеб', price: 10 },
+      { id: 'water', icon: '💧', name: 'Вода', price: 15 },
+      { id: 'apple', icon: '🍎', name: 'Яблоко', price: 8 },
+      { id: 'lamp', icon: '🔦', name: 'Фонарик', price: 50 }
+    ];
+
+    function updateHud() {
+      coinsEl.textContent = coins;
+      shopCoinsEl.textContent = coins;
+      const parts = goods
+        .filter(g => inventory[g.id])
+        .map(g => `${g.icon}×${inventory[g.id]}`);
+      invEl.textContent = parts.length ? parts.join('  ') : 'пусто';
+    }
+
+    function renderItems() {
+      itemsEl.innerHTML = '';
+      goods.forEach(g => {
+        const row = document.createElement('div');
+        row.className = 'item';
+        const label = document.createElement('span');
+        label.innerHTML = `${g.icon} ${g.name}<br><small>${g.price} монет</small>`;
+        const btn = document.createElement('button');
+        btn.textContent = 'Купить';
+        btn.disabled = coins < g.price;
+        btn.onclick = () => {
+          if (coins < g.price) return;
+          coins -= g.price;
+          inventory[g.id] = (inventory[g.id] || 0) + 1;
+          updateHud();
+          renderItems();
+          toast(`Куплено: ${g.name}`);
+        };
+        row.append(label, btn);
+        itemsEl.appendChild(row);
+      });
+    }
+
+    function openShop() {
+      shopOpen = true;
+      renderItems();
+      shopPanel.classList.remove('hidden');
+      controls.unlock();
+    }
+    function closeShop() {
+      shopPanel.classList.add('hidden');
+      shopOpen = false;
+      controls.lock();
+    }
+    closeShopBtn.addEventListener('click', closeShop);
+
+    function renderInventory() {
+      invItemsEl.innerHTML = '';
+      const owned = goods.filter(g => inventory[g.id]);
+      if (!owned.length) {
+        invItemsEl.innerHTML = '<div class="item"><span>Пока пусто. Купи что-нибудь в магазине.</span></div>';
+        return;
+      }
+      owned.forEach(g => {
+        const row = document.createElement('div');
+        row.className = 'item';
+        row.innerHTML = `<span>${g.icon} ${g.name}</span><b>×${inventory[g.id]}</b>`;
+        invItemsEl.appendChild(row);
+      });
+    }
+
+    function openInventory() {
+      inventoryOpen = true;
+      renderInventory();
+      inventoryPanel.classList.remove('hidden');
+      controls.unlock();
+    }
+    function closeInventory() {
+      inventoryPanel.classList.add('hidden');
+      inventoryOpen = false;
+      controls.lock();
+    }
+    function toggleInventory() {
+      if (shopOpen) return;
+      inventoryOpen ? closeInventory() : openInventory();
+    }
+    closeInventoryBtn.addEventListener('click', closeInventory);
+
+    function nearShop() {
+      const dx = camera.position.x - shopPos.x;
+      const dz = camera.position.z - shopPos.z;
+      return dx * dx + dz * dz < 100;
+    }
+
+    let toastTimer = null;
+    function toast(text) {
+      hintEl.textContent = text;
+      hintEl.style.opacity = 1;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastTimer = null;
+        hintEl.style.opacity = 0;
+      }, 1800);
+    }
+
+    updateHud();
+    renderItems();
+
+    // ---------- Коллизии ----------
+    function blocked(x, z) {
+      if (Math.abs(x) > HALF - 2 || Math.abs(z) > HALF - 2) return true;
+      for (const o of obstacles) {
+        if (o.type === 'circle') {
+          const dx = x - o.x, dz = z - o.z;
+          if (dx * dx + dz * dz < (o.r + RADIUS) ** 2) return true;
+        } else {
+          const cx = Math.max(o.minX, Math.min(x, o.maxX));
+          const cz = Math.max(o.minZ, Math.min(z, o.maxZ));
+          const dx = x - cx, dz = z - cz;
+          if (dx * dx + dz * dz < RADIUS * RADIUS) return true;
+        }
+      }
+      return false;
+    }
+
+    // ---------- Мини-карта ----------
+    function drawMap() {
+      const s = mapCanvas.width / WORLD;
+      const px = (x) => (x + HALF) * s;
+      const pz = (z) => (z + HALF) * s;
+
+      mctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+      mctx.fillStyle = 'rgba(38, 70, 33, .55)';
+      mctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+
+      mctx.fillStyle = 'rgba(120, 200, 100, .55)';
+      for (const t of treeSpots) mctx.fillRect(px(t.x) - 1, pz(t.z) - 1, 2, 2);
+
+      mctx.strokeStyle = '#c9b68f';
+      mctx.lineWidth = 8 * s;
+      mctx.beginPath();
+      mctx.moveTo(px(0), 0);
+      mctx.lineTo(px(0), mapCanvas.height);
+      mctx.stroke();
+
+      mctx.fillStyle = '#d08a5a';
+      for (const h of houses) {
+        mctx.fillRect(px(h.x - h.w / 2), pz(h.z - h.d / 2), h.w * s, h.d * s);
+      }
+
+      mctx.fillStyle = '#ff5a5a';
+      mctx.fillRect(px(8), pz(-45), 12 * s, 9 * s);
+
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      const angle = Math.atan2(fwd.x, -fwd.z);
+      mctx.save();
+      mctx.translate(px(camera.position.x), pz(camera.position.z));
+      mctx.rotate(angle);
+      mctx.fillStyle = '#ffffff';
+      mctx.beginPath();
+      mctx.moveTo(0, -6);
+      mctx.lineTo(4, 5);
+      mctx.lineTo(0, 2);
+      mctx.lineTo(-4, 5);
+      mctx.closePath();
+      mctx.fill();
+      mctx.restore();
+    }
+
+    // ---------- Игровой цикл ----------
+    const clock = new THREE.Clock();
+    let velocityY = 0;
+    let onGround = true;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+
+      if (gameActive && !shopOpen && !inventoryOpen) {
+        // Поворот стрелками (работает и без Pointer Lock)
+        const lookStep = 120 * dt;
+        if (move.lookLeft) applyLook(-lookStep, 0);
+        if (move.lookRight) applyLook(lookStep, 0);
+        if (move.lookUp) applyLook(0, -lookStep);
+        if (move.lookDown) applyLook(0, lookStep);
+
+        const dirF = (move.forward ? 1 : 0) - (move.back ? 1 : 0);
+        const dirR = (move.right ? 1 : 0) - (move.left ? 1 : 0);
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        right.y = 0;
+        right.normalize();
+
+        const dir = new THREE.Vector3()
+          .addScaledVector(forward, dirF)
+          .addScaledVector(right, dirR);
+        if (dir.lengthSq() > 0) dir.normalize();
+
+        const speed = move.sprint ? 11 : 6;
+        const stepX = dir.x * speed * dt;
+        const stepZ = dir.z * speed * dt;
+
+        if (!blocked(camera.position.x + stepX, camera.position.z)) camera.position.x += stepX;
+        if (!blocked(camera.position.x, camera.position.z + stepZ)) camera.position.z += stepZ;
+
+        if (move.jump && onGround) {
+          velocityY = 7;
+          onGround = false;
+        }
+        move.jump = false;
+
+        velocityY -= 20 * dt;
+        let y = camera.position.y + velocityY * dt;
+        const ground = heightAt(camera.position.x, camera.position.z) + EYE;
+        if (y <= ground) {
+          y = ground;
+          velocityY = 0;
+          onGround = true;
+        }
+        camera.position.y = y;
+
+        if (nearShop() && !toastTimer) {
+          hintEl.textContent = 'Нажмите E — зайти в магазин';
+          hintEl.style.opacity = 1;
+        } else if (!toastTimer) {
+          hintEl.style.opacity = 0;
+        }
+      }
+
+      // Солнце и тени следуют за игроком
+      sunLight.position.set(camera.position.x - 60, camera.position.y + 100, camera.position.z - 40);
+      sunLight.target.position.copy(camera.position);
+      sunLight.target.updateMatrixWorld();
+
+      drawMap();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
